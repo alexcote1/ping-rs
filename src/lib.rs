@@ -19,7 +19,7 @@
 //!     let options = ping_rs::PingOptions { ttl: 128, dont_fragment: true };
 //!     let result = ping_rs::send_ping(&addr, timeout, &data, Some(&options));
 //!     match result {
-//!         Ok(reply) => println!("Reply from {}: bytes={} time={}ms TTL={}", reply.address, data.len(), reply.rtt, options.ttl),
+//!         Ok(reply) => println!("Reply from {}: data={} bytes={} time={}ms TTL={}", reply.address, ,reply.data data.len(), reply.rtt, options.ttl),
 //!         Err(e) => println!("{:?}", e)
 //!     }
 //! }
@@ -43,7 +43,7 @@
 //!     let future = ping_rs::send_ping_async(&addr, timeout, data_arc, Some(&options));
 //!     let result = futures::executor::block_on(future);
 //!     match result {
-//!         Ok(reply) => println!("Reply from {}: bytes={} time={}ms TTL={}", reply.address, data.len(), reply.rtt, options.ttl),
+//!         Ok(reply) => println!("Reply from {}: data={} bytes={} time={}ms TTL={}", reply.address, ,reply.data data.len(), reply.rtt, options.ttl),
 //!         Err(e) => println!("{:?}", e)
 //!     }
 //! }
@@ -56,6 +56,10 @@ use std::io;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
+use tower::Service;
+use futures::future::BoxFuture;
+use tonic::transport::Uri;
+use std::task::{Context, Poll};
 
 /// Contains constant values represent general errors.
 #[allow(non_snake_case)]
@@ -166,4 +170,61 @@ pub fn send_ping(addr: &IpAddr, timeout: Duration, data: &[u8], options: Option<
 #[inline(always)]
 pub async fn send_ping_async(addr: &IpAddr, timeout: Duration, data: Arc<&[u8]>, options: Option<&PingOptions>) -> PingApiOutput {
     ping_mod::send_ping_async(addr, timeout, data, options).await
+}
+
+
+pub struct IcmpConnector {
+    target_addr: IpAddr,
+    options: Option<PingOptions>,
+}
+
+impl IcmpConnector {
+    pub fn new(target_addr: IpAddr, options: Option<PingOptions>) -> Self {
+        Self {
+            target_addr,
+            options,
+        }
+    }
+}
+
+
+impl Service<Uri> for IcmpConnector {
+    type Response = IcmpStream;
+    type Error = PingError;
+    type Future = BoxFuture<'static, Result<Self::Response>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+    
+
+    fn call(&mut self, _uri: Uri) -> Self::Future {
+        let target_addr = self.target_addr;
+        let options = self.options.clone();
+
+        Box::pin(async move {
+            let stream = IcmpStream::new(target_addr, options).await?;
+            Ok(stream)
+        })
+    }
+}
+
+
+
+pub struct IcmpStream {
+    target_addr: IpAddr,
+    options: Option<PingOptions>,
+}
+
+impl IcmpStream {
+    pub async fn new(target_addr: IpAddr, options: Option<PingOptions>) -> Result<Self> {        // Perform any necessary initialization here
+        Ok(Self {
+            target_addr,
+            options,
+        })
+    }
+
+    pub async fn send(&self, data: &[u8], timeout: Duration) -> Result<PingReply> {
+        send_ping_async(&self.target_addr, timeout, data.into(), self.options.as_ref()).await
+    }
 }

@@ -11,7 +11,10 @@ repository = "https://github.com/ruxo/ping-rs"
 
 [dependencies]
 futures = "0.3"
-
+tower = { version = "0.4.13", features = [
+    "util",
+] }
+tonic= "0.11.0"
 [target.'cfg(unix)'.dependencies]
 mio = { version = "0.8", features = ["os-poll", "os-ext", "net"] }
 socket2 = { version = "0.4", features = ["all"] }
