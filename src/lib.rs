@@ -227,6 +227,7 @@ impl Service<Uri> for IcmpConnector {
 
 
 /// Simulated ICMP Stream structure
+#[derive(Debug, Clone)]
 pub struct IcmpStream {
     target_addr: IpAddr,
     options: PingOptions,
@@ -303,3 +304,5 @@ impl AsyncWrite for IcmpStream {
         Poll::Ready(Ok(()))
     }
 }
+
+
