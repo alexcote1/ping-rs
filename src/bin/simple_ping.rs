@@ -12,7 +12,7 @@ const PING_OPTS: PingOptions = PingOptions { ttl: 128, dont_fragment: true };
 fn main() {
     let addrs = ["172.67.172.103", "8.8.8.8", "209.17.116.106", "209.17.116.160", "::1"]
         .map(|s| s.parse().unwrap());
-    let data = [8; 8];
+    let data = [8; 14];
 
     sync_ping(&addrs, &data);
     async_ping(&addrs, Arc::new(&data));

@@ -100,10 +100,21 @@ fn wait_reply<P: Proto>(socket: &Socket, start_ts: Instant) -> Result<PingReply>
     debug_assert_ne!(size, 0);
     let reply_buffer = unsafe { mem::transmute::<_, [u8; MTU]>(buffer) };
 
+    // Extract and validate the ICMP header
     let header = IcmpEchoHeader::get_ref(&reply_buffer);
-    if header.r#type != P::ECHO_REPLY_TYPE || header.code != P::ECHO_REPLY_CODE { return Err(PingError::IpError(IpStatus::BadHeader)) }
+    if header.r#type != P::ECHO_REPLY_TYPE || header.code != P::ECHO_REPLY_CODE {
+        return Err(PingError::IpError(IpStatus::BadHeader));
+    }
 
-    Ok(PingReply { address: addr.as_socket().unwrap().ip(), rtt: (start_ts.elapsed().as_secs_f64() * 1000.) as u32 })
+    // Extract the payload (data) from the buffer
+    let data_offset = ICMP_HEADER_SIZE;
+    let data = reply_buffer[data_offset..size].to_vec();
+
+    Ok(PingReply {
+        address: addr.as_socket().unwrap().ip(),
+        rtt: (start_ts.elapsed().as_secs_f64() * 1000.) as u32,
+        data, // Populate the data field
+    })
 }
 
 struct SocketConfig(Domain, Protocol);

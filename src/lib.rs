@@ -114,6 +114,7 @@ pub struct PingReply {
     pub address: IpAddr,
     /// Round-Trip Time in milliseconds
     pub rtt: u32,
+    pub data: Vec<u8>,
 }
 
 /// Ping errors

@@ -13,11 +13,22 @@ impl IcmpEcho for Ipv4Addr {
     }
     fn create_raw_reply(&self, reply: *mut u8) -> PingRawReply {
         let reply = unsafe { *(reply as *const ICMP_ECHO_REPLY) };
-
-        // properly handle Network BE
-        let addr_ptr = &reply.Address as *const u32 as *const [u8;4];
+    
+        // Handle Network Byte Order (Big Endian)
+        let addr_ptr = &reply.Address as *const u32 as *const [u8; 4];
         let addr = u32::from_be_bytes(unsafe { *addr_ptr });
-
-        PingRawReply { address: IpAddr::V4(Ipv4Addr::from(addr)), status: reply.Status, rtt: reply.RoundTripTime, }
+    
+        // Extract the reply data
+        let data_ptr = reply.Data as *const u8;
+        let data_len = reply.DataSize as usize;
+        let data = unsafe { std::slice::from_raw_parts(data_ptr, data_len).to_vec() };
+    
+        PingRawReply {
+            address: IpAddr::V4(Ipv4Addr::from(addr)),
+            status: reply.Status,
+            rtt: reply.RoundTripTime,
+            data, // Populate the data field
+        }
     }
+    
 }

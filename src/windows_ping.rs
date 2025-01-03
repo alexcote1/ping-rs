@@ -43,7 +43,8 @@ pub(crate) type ReplyBuffer = [u8; MAX_UDP_PACKET];
 pub(crate) struct PingRawReply {
     pub address: IpAddr,
     pub status: u32,
-    pub rtt: u32
+    pub rtt: u32,
+    pub data: Vec<u8>, // Add a field to store the reply data
 }
 
 impl Into<PingApiOutput> for PingRawReply {
