@@ -172,7 +172,7 @@ pub async fn send_ping_async(addr: &IpAddr, timeout: Duration, data: Arc<&[u8]>,
     ping_mod::send_ping_async(addr, timeout, data, options).await
 }
 
-
+#[derive(Clone)]
 pub struct IcmpConnector {
     target_addr: IpAddr,
     options: Option<PingOptions>,
