@@ -60,6 +60,9 @@ use tower::Service;
 use futures::future::BoxFuture;
 use tonic::transport::Uri;
 use std::task::{Context, Poll};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use std::pin::Pin;
+
 
 /// Contains constant values represent general errors.
 #[allow(non_snake_case)]
@@ -109,6 +112,13 @@ pub struct PingOptions {
     /// Socket's Dont Fragment
     pub dont_fragment: bool
 }
+impl std::fmt::Display for PingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for PingError {}
 
 /// Ping reply contains the destination address (from ICMP reply) and Round-Trip Time
 #[derive(Debug, Clone)]
@@ -203,7 +213,7 @@ impl Service<Uri> for IcmpConnector {
         let options = self.options.clone();
 
         Box::pin(async move {
-            let stream = IcmpStream::new(target_addr, options).await?;
+            let stream = IcmpStream::new(target_addr, options.unwrap_or_else(|| PingOptions { ttl: 64, dont_fragment: false })).await?;
             Ok(stream)
         })
     }
@@ -211,20 +221,85 @@ impl Service<Uri> for IcmpConnector {
 
 
 
+
+
+
+
+
+/// Simulated ICMP Stream structure
 pub struct IcmpStream {
     target_addr: IpAddr,
-    options: Option<PingOptions>,
+    options: PingOptions,
+    read_buffer: Vec<u8>,  // Buffer to store replies
 }
 
 impl IcmpStream {
-    pub async fn new(target_addr: IpAddr, options: Option<PingOptions>) -> Result<Self> {        // Perform any necessary initialization here
+    pub async fn new(target_addr: IpAddr, options: PingOptions) -> io::Result<Self> {
         Ok(Self {
             target_addr,
             options,
+            read_buffer: Vec::new(),
         })
     }
 
-    pub async fn send(&self, data: &[u8], timeout: Duration) -> Result<PingReply> {
-        send_ping_async(&self.target_addr, timeout, data.into(), self.options.as_ref()).await
+    /// Send a ping request asynchronously and store the reply in the read buffer
+    pub async fn send(&mut self, data: &[u8], timeout: Duration) -> io::Result<()> {
+        let data_arc = Arc::new(data);
+        let result = send_ping_async(&self.target_addr, timeout, data_arc, Some(&self.options)).await;
+    
+        match result {
+            Ok(reply) => {
+                self.read_buffer.extend(reply.data);
+                Ok(())
+            }
+            Err(e) => Err(io::Error::new(io::ErrorKind::Other, format!("{:?}", e))),
+        }
+    }
+}
+
+impl AsyncRead for IcmpStream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        if self.read_buffer.is_empty() {
+            return Poll::Pending; // No data available yet
+        }
+
+        let available = self.read_buffer.len();
+        let to_copy = buf.remaining().min(available);
+        let data: Vec<u8> = self.read_buffer.drain(0..to_copy).collect();
+        buf.put_slice(&data);
+
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl AsyncWrite for IcmpStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        let timeout = Duration::from_secs(1); // Example timeout
+        let options = self.options.clone();
+        let addr = self.target_addr;
+        let data = buf.to_vec();
+
+        tokio::spawn(async move {
+            let data_arc = Arc::new(data.as_slice());
+            let _ = send_ping_async(&addr, timeout, data_arc, Some(&options)).await;
+        });
+
+        Poll::Ready(Ok(buf.len()))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(Ok(()))
     }
 }
