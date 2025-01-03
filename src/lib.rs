@@ -227,7 +227,7 @@ impl Service<Uri> for IcmpConnector {
 
 
 
-#[derive(Clone)]
+#[derive(Debug,Clone)]
 pub struct IcmpStream {
     target_addr: IpAddr,
     options: PingOptions,
