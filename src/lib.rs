@@ -226,8 +226,8 @@ impl Service<Uri> for IcmpConnector {
 
 
 
-/// Simulated ICMP Stream structure
-#[derive(Debug, Clone)]
+
+#[derive(Clone)]
 pub struct IcmpStream {
     target_addr: IpAddr,
     options: PingOptions,
@@ -305,4 +305,22 @@ impl AsyncWrite for IcmpStream {
     }
 }
 
+impl Service<IpAddr> for IcmpStream {
+    type Response = IcmpStream;
+    type Error = std::io::Error;
+    type Future = BoxFuture<'static, std::result::Result<Self::Response, Self::Error>>;
 
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, target_addr: IpAddr) -> Self::Future {
+        let options = self.options.clone();
+
+        Box::pin(async move {
+            IcmpStream::new(target_addr, options)
+                .await
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("{:?}", e)))
+        })
+    }
+}
