@@ -22,6 +22,7 @@
 //!         Ok(reply) => println!("Reply from {}: data={} bytes={} time={}ms TTL={}", reply.address, ,reply.data data.len(), reply.rtt, options.ttl),
 //!         Err(e) => println!("{:?}", e)
 //!     }
+//}}
 //! }
 //! ```
 //!
@@ -206,11 +207,11 @@ impl Service<Uri> for IcmpConnector {
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<()>> {
         Poll::Ready(Ok(()))
     }
-    
 
     fn call(&mut self, _uri: Uri) -> Self::Future {
         let target_addr = self.target_addr;
         let options = self.options.clone();
+        let mut connector = self.clone(); // Clone the IcmpConnector before calling send_ping_async
 
         Box::pin(async move {
             let stream = IcmpStream::new(target_addr, options.unwrap_or_else(|| PingOptions { ttl: 64, dont_fragment: false })).await?;
@@ -218,6 +219,7 @@ impl Service<Uri> for IcmpConnector {
         })
     }
 }
+
 
 
 
